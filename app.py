@@ -132,17 +132,25 @@ def download_from_wetransfer(url, output_path):
 def handle_dropbox_transfer_with_prompt(url, output_dir):
     """Handle Dropbox Transfer with manual intervention"""
     error_msg = f"""
-    ⚠️ DROPBOX TRANSFER DETECTED ⚠️
+    🔗 DROPBOX TRANSFER DETECTED - Manual Link Required 🔗
     
-    Unfortunately, Dropbox Transfer links require manual intervention.
+    Dropbox Transfer links need a small extra step:
     
-    Please do the following:
+    OPTION 1 - Get Direct Download Link (Recommended):
     1. Open this URL in a new tab: {url}
-    2. Click 'Download' or 'Download all'
-    3. If it's a single file, upload it directly using 'File Upload' method instead
-    4. If it's multiple files, they'll download as ZIP - extract and upload the media file
+    2. Click 'Download' or 'Download all' 
+    3. Your browser will start downloading
+    4. Go to your browser's download manager (usually Ctrl+J or Cmd+Shift+J)
+    5. RIGHT-CLICK on the downloading item → "Copy Download Link"
+    6. Come back here and paste that direct link in the "File URL" field
+    7. Try processing again - it should work!
     
-    For now, please use the 'File Upload' option instead of the URL method.
+    OPTION 2 - File Upload Instead:
+    1. Let the download finish from step 2 above
+    2. Switch to "File Upload" method in the form
+    3. Upload the downloaded file directly
+    
+    💡 Tip: The direct download link (Option 1) is usually faster and works great with the URL method!
     """
     raise Exception(error_msg)
 
