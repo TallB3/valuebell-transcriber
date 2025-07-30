@@ -387,7 +387,7 @@ def process_transcript_complete(episode_name, source_type, delivery_method, file
                     with open(target_mp3_path, "rb") as audio_file_object:
                         transcription_response_obj = client.speech_to_text.convert(
                             file=audio_file_object,
-                            model_id="scribe_v1",
+                            model_id="scribe_v1_experimental",
                             language_code=language,
                             diarize=True,
                             tag_audio_events=False,
