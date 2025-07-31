@@ -16,6 +16,7 @@ import zipfile
 import re
 import shutil
 import tempfile
+import numpy as np
 from elevenlabs.client import ElevenLabs
 from collections import defaultdict
 from bs4 import BeautifulSoup
@@ -133,23 +134,23 @@ def handle_dropbox_transfer_with_prompt(url, output_dir):
     """Handle Dropbox Transfer with manual intervention"""
     error_msg = f"""
     🔗 DROPBOX TRANSFER DETECTED - Manual Link Required 🔗
-    
+
     Dropbox Transfer links need a small extra step:
-    
+
     OPTION 1 - Get Direct Download Link (Recommended):
     1. Open this URL in a new tab: {url}
-    2. Click 'Download' or 'Download all' 
+    2. Click 'Download' or 'Download all'
     3. Your browser will start downloading
     4. Go to your browser's download manager (usually Ctrl+J or Cmd+Shift+J)
     5. RIGHT-CLICK on the downloading item → "Copy Download Link"
     6. Come back here and paste that direct link in the "File URL" field
     7. Try processing again - it should work!
-    
+
     OPTION 2 - File Upload Instead:
     1. Let the download finish from step 2 above
     2. Switch to "File Upload" method in the form
     3. Upload the downloaded file directly
-    
+
     💡 Tip: The direct download link (Option 1) is usually faster and works great with the URL method!
     """
     raise Exception(error_msg)
@@ -202,6 +203,110 @@ def format_srt_time(seconds_float):
     milliseconds = millis % 1000
     return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
 
+def analyze_transcript_quality(words_data, audio_duration=None):
+    """Analyze transcript for potential issues and return warnings"""
+    warnings = []
+    
+    if not words_data:
+        return warnings
+    
+    # Calculate durations for all tokens
+    token_durations = []
+    token_info = []
+    
+    for i, word_obj in enumerate(words_data):
+        start_time = get_word_attr(word_obj, 'start')
+        end_time = get_word_attr(word_obj, 'end')
+        text = get_word_attr(word_obj, 'text', '')
+        
+        if start_time is not None and end_time is not None:
+            duration = end_time - start_time
+            token_durations.append(duration)
+            token_info.append({
+                'index': i,
+                'text': text,
+                'start': start_time,
+                'end': end_time,
+                'duration': duration
+            })
+    
+    if not token_durations:
+        return warnings
+    
+    # Check final token
+    final_token = token_info[-1]
+    if final_token['duration'] > 10:
+        warnings.append(
+            f"⚠️ Final token has abnormal duration: '{final_token['text']}' "
+            f"spans {final_token['duration']:.1f} seconds "
+            f"({format_txt_timestamp(final_token['start'])} - {format_txt_timestamp(final_token['end'])})"
+        )
+    
+    # Calculate statistics
+    durations_array = np.array(token_durations)
+    mean_duration = np.mean(durations_array)
+    std_duration = np.std(durations_array)
+    
+    # Calculate z-scores (only if std > 0 to avoid division by zero)
+    if std_duration > 0:
+        z_scores = (durations_array - mean_duration) / std_duration
+        
+        # Find outliers (z-score > 3)
+        outlier_threshold = 3
+        outliers = []
+        
+        for i, z_score in enumerate(z_scores):
+            if z_score > outlier_threshold:
+                token = token_info[i]
+                outliers.append(token)
+        
+        # Report outliers (excluding the final token if already reported)
+        for outlier in outliers:
+            if outlier['index'] != len(token_info) - 1: # Not the final token
+                warnings.append(
+                    f"⚠️ Potential error: Token '{outlier['text']}' at "
+                    f"{format_txt_timestamp(outlier['start'])} has unusual duration "
+                    f"of {outlier['duration']:.1f} seconds (z-score: {z_scores[outlier['index']]:.2f})"
+                )
+    
+    # Check for premature ending (if we have audio duration)
+    if audio_duration is not None:
+        last_token_end = token_info[-1]['end']
+        time_difference = audio_duration - last_token_end
+        
+        # If more than 5 seconds of audio remain after last token
+        if time_difference > 5:
+            warnings.append(
+                f"⚠️ Transcript may be incomplete: Audio duration is "
+                f"{format_txt_timestamp(audio_duration)} but transcript ends at "
+                f"{format_txt_timestamp(last_token_end)} "
+                f"({time_difference:.1f} seconds unaccounted)"
+            )
+    
+    # Add statistics summary if there are warnings
+    if warnings:
+        warnings.insert(0, f"📊 Token duration statistics: mean={mean_duration:.2f}s, std={std_duration:.2f}s")
+        warnings.insert(0, "=" * 60)
+        warnings.insert(0, "🔍 TRANSCRIPT QUALITY ANALYSIS")
+        warnings.append("=" * 60)
+    
+    return warnings
+
+def get_audio_duration(file_path):
+    """Get duration of audio/video file using ffprobe"""
+    try:
+        cmd = [
+            'ffprobe', '-v', 'error', '-show_entries', 
+            'format=duration', '-of', 
+            'default=noprint_wrappers=1:nokey=1', file_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            return float(result.stdout.strip())
+    except Exception as e:
+        print(f"Could not determine audio duration: {e}")
+    return None
+
 def process_transcript_complete(episode_name, source_type, delivery_method, file_input, url_input, language, api_key, progress=gr.Progress()):
     """Complete processing function that does everything"""
     
@@ -210,16 +315,16 @@ def process_transcript_complete(episode_name, source_type, delivery_method, file
         progress(0.05, desc="Validating inputs...")
         
         if not episode_name.strip():
-            return "❌ Error: Episode name is required", "", "", None, None, None, None
+            return "❌ Error: Episode name is required", "", "", "", None, None, None, None
         
         if delivery_method == "File Upload" and not file_input:
-            return "❌ Error: Please upload a file", "", "", None, None, None, None
+            return "❌ Error: Please upload a file", "", "", "", None, None, None, None
         
         if delivery_method == "URL" and not url_input.strip():
-            return "❌ Error: Please provide a URL", "", "", None, None, None, None
+            return "❌ Error: Please provide a URL", "", "", "", None, None, None, None
         
         if source_type in ["Video File", "Audio File"] and not api_key.strip():
-            return "❌ Error: ElevenLabs API key is required for transcription", "", "", None, None, None, None
+            return "❌ Error: ElevenLabs API key is required for transcription", "", "", "", None, None, None, None
         
         # Step 2: Setup
         progress(0.1, desc="Setting up processing...")
@@ -232,7 +337,8 @@ def process_transcript_complete(episode_name, source_type, delivery_method, file
         
         # File paths
         base_filename = clean_episode_name
-        target_mp3_path = os.path.join(temp_dir, f"{base_filename}.mp3")
+        # This will be WAV or MP3
+        target_audio_path = None
         downloaded_source_path = os.path.join(temp_dir, f"{base_filename}_source")
         raw_json_cache_path = os.path.join(temp_dir, f"{base_filename}_raw_transcript.json")
         
@@ -242,6 +348,8 @@ def process_transcript_complete(episode_name, source_type, delivery_method, file
         loaded_from_cache = False
         audio_file_ready = False
         source_file_path = None
+        audio_duration = None
+        quality_warnings = []
         
         # Step 3: Handle file input
         progress(0.15, desc="Processing file input...")
@@ -250,7 +358,7 @@ def process_transcript_complete(episode_name, source_type, delivery_method, file
             # Handle JSON file
             if delivery_method == "File Upload":
                 if file_input is None:
-                    return "❌ Error: No JSON file uploaded", "", "", None, None, None, None
+                    return "❌ Error: No JSON file uploaded", "", "", "", None, None, None, None
                 
                 # Save uploaded file - file_input is now a file path string in Gradio
                 json_path = os.path.join(temp_dir, f"{base_filename}_uploaded.json")
@@ -271,7 +379,7 @@ def process_transcript_complete(episode_name, source_type, delivery_method, file
                     loaded_from_cache = True
                     progress(0.3, desc="JSON transcript loaded successfully!")
                 else:
-                    return "❌ Error: JSON doesn't appear to be in ElevenLabs format", "", "", None, None, None, None
+                    return "❌ Error: JSON doesn't appear to be in ElevenLabs format", "", "", "", None, None, None, None
             
             else:  # URL delivery for JSON
                 json_url = url_input.strip()
@@ -294,7 +402,7 @@ def process_transcript_complete(episode_name, source_type, delivery_method, file
                     loaded_from_cache = True
                     progress(0.3, desc="JSON transcript downloaded and loaded!")
                 else:
-                    return "❌ Error: Downloaded JSON doesn't appear to be in ElevenLabs format", "", "", None, None, None, None
+                    return "❌ Error: Downloaded JSON doesn't appear to be in ElevenLabs format", "", "", "", None, None, None, None
         
         else:
             # Handle video/audio files
@@ -302,7 +410,7 @@ def process_transcript_complete(episode_name, source_type, delivery_method, file
             
             if delivery_method == "File Upload":
                 if file_input is None:
-                    return "❌ Error: No media file uploaded", "", "", None, None, None, None
+                    return "❌ Error: No media file uploaded", "", "", "", None, None, None, None
                 
                 # Save uploaded file - file_input is now a file path string in Gradio
                 file_ext = os.path.splitext(file_input)[1]
@@ -325,56 +433,63 @@ def process_transcript_complete(episode_name, source_type, delivery_method, file
                 source_file_path = download_file_from_source(file_url, source_file_path, detected_source)
                 print(f"✅ File downloaded: {source_file_path}")
             
-            # Convert video to audio if needed
-            if source_type == "Video File":
-                progress(0.3, desc="Converting video to audio...")
+            # Get audio duration before conversion
+            audio_duration = get_audio_duration(source_file_path)
+            
+            # --- NEW WAV-first Conversion Logic ---
+            progress(0.3, desc="Converting to high-quality WAV...")
+            
+            # Define target WAV path
+            wav_path = os.path.join(temp_dir, f"{base_filename}.wav")
+
+            # Command to convert ANY input to a standardized high-quality WAV
+            command = [
+                "ffmpeg", "-i", source_file_path,
+                "-acodec", "pcm_s16le",    # Optimal codec for uncompressed WAV
+                "-ar", "16000",             # Optimal sample rate for speech-to-text
+                "-ac", "1",                 # Mono channel
+                "-y", wav_path
+            ]
+            subprocess.run(command, capture_output=True, text=True, check=True)
+            print(f"✅ Converted to high-quality WAV: {wav_path}")
+
+            # Clean up original downloaded source file
+            if os.path.exists(source_file_path):
+                os.remove(source_file_path)
+
+            # --- NEW Size Check and Fallback Logic ---
+            wav_file_size_bytes = os.path.getsize(wav_path)
+            one_gb_in_bytes = 1 * 1024 * 1024 * 1024
+
+            if wav_file_size_bytes > one_gb_in_bytes:
+                progress(0.4, desc="WAV file > 1GB. Converting to high-quality MP3...")
+                print(f"⚠️ WAV file is {wav_file_size_bytes / (1024*1024):.2f} MB (> 1GB). Creating MP3 fallback.")
                 
-                command = [
-                    "ffmpeg", "-i", source_file_path,
-                    "-acodec", "libmp3lame", "-ar", "44100", "-ac", "1",
-                    "-b:a", "128k", "-y", target_mp3_path
+                mp3_path = os.path.join(temp_dir, f"{base_filename}.mp3")
+                
+                # Command to convert the large WAV to a high-quality MP3
+                mp3_command = [
+                    "ffmpeg", "-i", wav_path,
+                    "-acodec", "libmp3lame",
+                    "-b:a", "320k",         # High-quality bitrate
+                    "-ar", "44100",         # Standard MP3 sample rate
+                    "-ac", "1",
+                    "-y", mp3_path
                 ]
-                subprocess.run(command, capture_output=True, text=True, check=True)
-                audio_file_ready = True
+                subprocess.run(mp3_command, capture_output=True, text=True, check=True)
                 
-                # Clean up video file
-                if os.path.exists(source_file_path):
-                    os.remove(source_file_path)
-                
-                print(f"✅ Video converted to audio: {target_mp3_path}")
-            
-            else:  # Audio file
-                progress(0.3, desc="Processing audio file...")
-                
-                if source_file_path != target_mp3_path:
-                    file_ext = os.path.splitext(source_file_path)[1].lower()
-                    if file_ext != '.mp3':
-                        # Convert to MP3
-                        command = [
-                            "ffmpeg", "-i", source_file_path,
-                            "-acodec", "libmp3lame", "-ar", "44100", "-ac", "1",
-                            "-b:a", "128k", "-y", target_mp3_path
-                        ]
-                        subprocess.run(command, capture_output=True, text=True, check=True)
-                    else:
-                        # Just copy MP3
-                        shutil.copy2(source_file_path, target_mp3_path)
-                    
-                    # Clean up source file
-                    if source_file_path != target_mp3_path and os.path.exists(source_file_path):
-                        os.remove(source_file_path)
-                
-                audio_file_ready = True
-                print(f"✅ Audio file ready: {target_mp3_path}")
-            
-            # Check file size
-            if audio_file_ready and os.path.exists(target_mp3_path):
-                mp3_file_size_bytes = os.path.getsize(target_mp3_path)
-                mp3_file_size_mb = mp3_file_size_bytes / (1024 * 1024)
-                print(f"Audio file size: {mp3_file_size_mb:.2f} MB")
-                
-                if mp3_file_size_bytes > 1024 * 1024 * 1024:  # 1GB
-                    return "❌ Error: Audio file is larger than 1GB limit", "", "", None, None, None, None
+                # The final audio is now the MP3
+                target_audio_path = mp3_path
+                print(f"✅ MP3 fallback created: {target_audio_path}")
+
+                # Clean up the oversized WAV file
+                if os.path.exists(wav_path):
+                    os.remove(wav_path)
+            else:
+                # The WAV file is fine, use it
+                target_audio_path = wav_path
+
+            audio_file_ready = True
             
             # Transcribe
             if not loaded_from_cache and audio_file_ready:
@@ -384,7 +499,7 @@ def process_transcript_complete(episode_name, source_type, delivery_method, file
                     custom_timeout = httpx.Timeout(60.0, read=900.0, connect=10.0)
                     client = ElevenLabs(api_key=api_key, timeout=custom_timeout)
                     
-                    with open(target_mp3_path, "rb") as audio_file_object:
+                    with open(target_audio_path, "rb") as audio_file_object:
                         transcription_response_obj = client.speech_to_text.convert(
                             file=audio_file_object,
                             model_id="scribe_v1_experimental",
@@ -409,7 +524,11 @@ def process_transcript_complete(episode_name, source_type, delivery_method, file
                         print("✅ Transcription successful!")
                     
                 except Exception as e:
-                    return f"❌ Transcription error: {str(e)}", "", "", None, None, None, None
+                    return f"❌ Transcription error: {str(e)}", "", "", "", None, None, None, None
+        
+        # Step 3.5: Analyze transcript quality
+        progress(0.72, desc="Analyzing transcript quality...")
+        quality_warnings = analyze_transcript_quality(words_data, audio_duration)
         
         # Step 4: Generate outputs (NO speaker identification/mapping)
         progress(0.75, desc="Generating transcript...")
@@ -475,8 +594,8 @@ def process_transcript_complete(episode_name, source_type, delivery_method, file
                     current_cue_speaker = speaker_id_val
                     current_cue_start_time = word_start_val
                 elif (speaker_id_val != current_cue_speaker or
-                      (word_end_val - current_cue_start_time) > MAX_CUE_DURATION_SECONDS or
-                      len(" ".join([w['text'] for w in current_cue_words_info] + [word_text_val])) > MAX_CUE_CHARACTERS):
+                        (word_end_val - current_cue_start_time) > MAX_CUE_DURATION_SECONDS or
+                        len(" ".join([w['text'] for w in current_cue_words_info] + [word_text_val])) > MAX_CUE_CHARACTERS):
                     finalize_current_cue = True
                 
                 if finalize_current_cue and current_cue_words_info:
@@ -495,18 +614,24 @@ def process_transcript_complete(episode_name, source_type, delivery_method, file
             
             srt_content = "\n".join(srt_cues)
         
+        # Load JSON for display
+        json_content = ""
+        if os.path.exists(raw_json_cache_path):
+            with open(raw_json_cache_path, 'r', encoding='utf-8') as f:
+                json_content = f.read()
+        
         # Step 5: Create and save files
         progress(0.95, desc="Creating files...")
         
         # Save files with new naming convention
         txt_filename = f"{base_filename}_transcript.txt"
         srt_filename = f"{base_filename}_subtitles.srt"
-        mp3_filename = f"{base_filename}.mp3"
+        # The audio filename is now dynamic
+        audio_filename = os.path.basename(target_audio_path) if target_audio_path else ""
         json_filename = f"{base_filename}_raw_transcript.json"
         
         txt_path = os.path.join(temp_dir, txt_filename)
         srt_path = os.path.join(temp_dir, srt_filename)
-        mp3_path = target_mp3_path
         json_path = raw_json_cache_path
         
         # Write files
@@ -526,8 +651,8 @@ def process_transcript_complete(episode_name, source_type, delivery_method, file
                 speaker_id = get_word_attr(word_obj, 'speaker_id', "speaker_unknown")
                 unique_speakers.add(speaker_id)
         
-        # Final status
-        status_message = f"""✅ Processing completed successfully!
+        # Final status - include warnings
+        status_parts = [f"""✅ Processing completed successfully!
 
 📊 Summary:
 • Episode: {clean_episode_name}
@@ -539,25 +664,32 @@ def process_transcript_complete(episode_name, source_type, delivery_method, file
 📁 Generated files:
 • TXT transcript: {txt_filename}
 • SRT subtitles: {srt_filename}
-• Audio file: {mp3_filename}
-• JSON cache: {json_filename}
-
-🎉 Select which files to download below!"""
+• Audio file: {audio_filename}
+• JSON data: {json_filename}"""]
+        
+        # Add quality warnings if any
+        if quality_warnings:
+            status_parts.append("\n")
+            status_parts.extend(quality_warnings)
+        
+        status_parts.append("\n🎉 Select which files to download below!")
+        
+        status_message = "\n".join(status_parts)
         
         # Return file paths for download options
         file_paths = {
             'txt': txt_path if os.path.exists(txt_path) else None,
             'srt': srt_path if os.path.exists(srt_path) and srt_content else None,
-            'mp3': mp3_path if os.path.exists(mp3_path) else None,
+            'audio': target_audio_path if target_audio_path and os.path.exists(target_audio_path) else None,
             'json': json_path if os.path.exists(json_path) else None
         }
         
-        return status_message, txt_content, srt_content, file_paths['txt'], file_paths['srt'], file_paths['mp3'], file_paths['json']
+        return status_message, txt_content, srt_content, json_content, file_paths['txt'], file_paths['srt'], file_paths['audio'], file_paths['json']
         
     except Exception as e:
-        return f"❌ Error during processing: {str(e)}", "", "", None, None, None, None
+        return f"❌ Error during processing: {str(e)}", "", "", "", None, None, None, None
 
-def handle_download_selection(txt_selected, srt_selected, mp3_selected, json_selected, txt_path, srt_path, mp3_path, json_path, episode_name):
+def handle_download_selection(txt_selected, srt_selected, audio_selected, json_selected, txt_path, srt_path, audio_path, json_path, episode_name):
     """Handle the download based on checkbox selection"""
     
     if not episode_name:
@@ -575,9 +707,9 @@ def handle_download_selection(txt_selected, srt_selected, mp3_selected, json_sel
         selected_files.append(os.path.basename(srt_path))
         selected_paths.append(srt_path)
     
-    if mp3_selected and mp3_path and os.path.exists(mp3_path):
-        selected_files.append(os.path.basename(mp3_path))
-        selected_paths.append(mp3_path)
+    if audio_selected and audio_path and os.path.exists(audio_path):
+        selected_files.append(os.path.basename(audio_path))
+        selected_paths.append(audio_path)
     
     if json_selected and json_path and os.path.exists(json_path):
         selected_files.append(os.path.basename(json_path))
@@ -719,6 +851,14 @@ def create_interface():
                     interactive=False,
                     show_copy_button=True
                 )
+            
+            with gr.TabItem("💾 JSON Data"):
+                json_output = gr.Textbox(
+                    label="Raw JSON Data",
+                    lines=15,
+                    interactive=False,
+                    show_copy_button=True
+                )
         
         # Download selection section
         gr.Markdown("## 📥 Download Files")
@@ -727,7 +867,7 @@ def create_interface():
         with gr.Row():
             txt_checkbox = gr.Checkbox(label="📝 Transcript (.txt)", value=True)  # Selected by default
             srt_checkbox = gr.Checkbox(label="📺 Subtitles (.srt)", value=False)
-            mp3_checkbox = gr.Checkbox(label="🎵 Audio (.mp3)", value=False)
+            audio_checkbox = gr.Checkbox(label="🎵 Audio (.wav/.mp3)", value=False)
             json_checkbox = gr.Checkbox(label="💾 Raw Data (.json)", value=False)
         
         with gr.Row():
@@ -742,7 +882,7 @@ def create_interface():
         # Hidden components to store file paths
         txt_path_store = gr.State()
         srt_path_store = gr.State()
-        mp3_path_store = gr.State()
+        audio_path_store = gr.State()
         json_path_store = gr.State()
         
         # Event handlers
@@ -757,29 +897,29 @@ def create_interface():
                 language,
                 api_key
             ],
-            outputs=[status_output, txt_output, srt_output, txt_path_store, srt_path_store, mp3_path_store, json_path_store],
+            outputs=[status_output, txt_output, srt_output, json_output, txt_path_store, srt_path_store, audio_path_store, json_path_store],
             show_progress=True
         )
         
         download_btn.click(
             fn=handle_download_selection,
             inputs=[
-                txt_checkbox, srt_checkbox, mp3_checkbox, json_checkbox,
-                txt_path_store, srt_path_store, mp3_path_store, json_path_store,
+                txt_checkbox, srt_checkbox, audio_checkbox, json_checkbox,
+                txt_path_store, srt_path_store, audio_path_store, json_path_store,
                 episode_name
             ],
             outputs=[download_file, download_status]
         )
         
         def clear_all():
-            return ("", "Audio File", "File Upload", None, "", "heb", "", "", "", "", None, None, None, None, "", None)
+            return ("", "Audio File", "File Upload", None, "", "heb", "", "", "", "", "", None, None, None, None, "", None)
         
         clear_btn.click(
             fn=clear_all,
             outputs=[
                 episode_name, source_type, delivery_method, file_input,
-                url_input, language, api_key, status_output, txt_output, srt_output, 
-                txt_path_store, srt_path_store, mp3_path_store, json_path_store, download_status, download_file
+                url_input, language, api_key, status_output, txt_output, srt_output, json_output,
+                txt_path_store, srt_path_store, audio_path_store, json_path_store, download_status, download_file
             ]
         )
 
