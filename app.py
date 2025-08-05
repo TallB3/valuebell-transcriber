@@ -505,7 +505,7 @@ def process_transcript_complete(episode_name, source_type, delivery_method, file
                             model_id="scribe_v1_experimental",
                             language_code=language,
                             diarize=True,
-                            tag_audio_events=True,
+                            tag_audio_events=False,
                             timestamps_granularity="word"
                         )
                     
