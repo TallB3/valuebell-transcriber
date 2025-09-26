@@ -1,0 +1,7 @@
+1
+00:00:00,000 --> 00:01:00,000
+speaker_1: Hello world
+
+2
+00:01:01,000 --> 00:04:30,000
+speaker_2: this is a test transcript for valuebell transcriber
