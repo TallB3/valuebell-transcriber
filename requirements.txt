@@ -1,10 +1,19 @@
+# Core web interface
 gradio>=4.0.0
+
+# Transcription service
 elevenlabs==2.0.0
+httpx>=0.24.0
+
+# File downloads
 gdown>=4.7.1
+requests>=2.28.0
+beautifulsoup4>=4.11.0
+
+# Google Drive API (optional for advanced Drive integration)
 google-api-python-client>=2.100.0
 google-auth-httplib2>=0.1.0
 google-auth-oauthlib>=1.0.0
-requests>=2.28.0
-beautifulsoup4>=4.11.0
-httpx>=0.24.0
-numpy>=2.3.0
+
+# Data processing
+numpy>=1.21.0

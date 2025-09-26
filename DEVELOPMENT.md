@@ -2,10 +2,10 @@
 
 ## Prerequisites
 
-### Required System Dependencies
+### System Dependencies
 
 #### FFmpeg (Required)
-FFmpeg is essential for audio/video processing:
+FFmpeg is essential for audio/video processing. Install system-wide:
 
 **Ubuntu/Debian:**
 ```bash
@@ -15,18 +15,14 @@ sudo apt install ffmpeg
 
 **macOS:**
 ```bash
-# Using Homebrew
 brew install ffmpeg
-
-# Using MacPorts
-sudo port install ffmpeg
 ```
 
 **Windows:**
 1. Download from https://ffmpeg.org/download.html
-2. Extract to a folder (e.g., `C:\ffmpeg`)
+2. Extract to `C:\ffmpeg`
 3. Add `C:\ffmpeg\bin` to your PATH environment variable
-4. Restart your terminal/command prompt
+4. Restart terminal
 
 **Verify Installation:**
 ```bash
@@ -34,26 +30,84 @@ ffmpeg -version
 ffprobe -version
 ```
 
-### Python Dependencies
+### Python Environment Setup
 
-Install the required Python packages:
-
+#### Option 1: Using venv (Recommended)
 ```bash
-# Install main dependencies
+# Create virtual environment
+python3 -m venv venv
+
+# Activate virtual environment
+source venv/bin/activate  # Linux/macOS
+# or
+venv\Scripts\activate     # Windows
+
+# Install dependencies
 pip install -r requirements.txt
 
-# Install testing dependencies (optional)
+# For testing (optional)
 pip install -r requirements-test.txt
+
+# Deactivate when done
+deactivate
+```
+
+#### Option 2: Using conda
+```bash
+# Create conda environment
+conda create -n valuebell python=3.11
+conda activate valuebell
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Deactivate when done
+conda deactivate
+```
+
+#### Option 3: Using Poetry (Advanced)
+```bash
+# Initialize poetry (if pyproject.toml doesn't exist)
+poetry init
+
+# Install dependencies
+poetry install
+
+# Run app in poetry environment
+poetry run python app.py
 ```
 
 ## Running the Application
 
 ### Local Development
+
+**With virtual environment:**
 ```bash
+# Activate your environment first
+source venv/bin/activate  # or your preferred method
+
+# Run the app
 python app.py
 ```
 
+**With conda:**
+```bash
+conda activate valuebell
+python app.py
+```
+
+**With poetry:**
+```bash
+poetry run python app.py
+```
+
 The app will be available at: http://localhost:7860
+
+**Environment Variables (Optional):**
+```bash
+# Create .env file for API keys (never commit this!)
+echo "ELEVENLABS_API_KEY=your_key_here" > .env
+```
 
 ### Testing the Setup
 

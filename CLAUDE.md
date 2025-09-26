@@ -37,17 +37,22 @@ valuebell-transcriber/
 
 ## Development Commands
 
-**Prerequisites:**
+**Clean Environment Setup:**
 ```bash
-# Install FFmpeg (required for audio processing)
-sudo apt install ffmpeg  # Ubuntu/Debian
-# or
-brew install ffmpeg      # macOS
+# Automated setup (Linux/macOS)
+./setup_env.sh
+
+# Or manual setup with virtual environment
+python3 -m venv venv
+source venv/bin/activate  # Linux/macOS
+# venv\Scripts\activate   # Windows
+pip install -r requirements.txt
 ```
 
 **Run the application:**
 ```bash
-pip install -r requirements.txt
+# Activate environment first
+source venv/bin/activate  # or your preferred method
 python app.py
 ```
 

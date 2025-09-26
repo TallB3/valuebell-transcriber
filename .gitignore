@@ -28,6 +28,15 @@ env/
 ENV/
 .venv/
 .env
+.env.local
+.env.*.local
+
+# Poetry
+poetry.lock
+.venv
+
+# Conda
+.conda/
 
 # IDE
 .vscode/
