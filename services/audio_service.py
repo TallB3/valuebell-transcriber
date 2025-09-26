@@ -23,6 +23,11 @@ def get_audio_duration(file_path):
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode == 0:
             return float(result.stdout.strip())
+    except FileNotFoundError:
+        raise Exception("FFmpeg is not installed or not found in PATH. Please install FFmpeg:\n"
+                       "- Ubuntu/Debian: sudo apt install ffmpeg\n"
+                       "- macOS: brew install ffmpeg\n"
+                       "- Windows: Download from https://ffmpeg.org/download.html")
     except Exception as e:
         print(f"Could not determine audio duration: {e}")
     return None
@@ -37,8 +42,14 @@ def convert_to_wav(input_path, output_path):
         "-ac", str(DEFAULT_CHANNELS),     # Mono channel
         "-y", output_path
     ]
-    subprocess.run(command, capture_output=True, text=True, check=True)
-    print(f"✅ Converted to high-quality WAV: {output_path}")
+    try:
+        subprocess.run(command, capture_output=True, text=True, check=True)
+        print(f"✅ Converted to high-quality WAV: {output_path}")
+    except FileNotFoundError:
+        raise Exception("FFmpeg is not installed or not found in PATH. Please install FFmpeg:\n"
+                       "- Ubuntu/Debian: sudo apt install ffmpeg\n"
+                       "- macOS: brew install ffmpeg\n"
+                       "- Windows: Download from https://ffmpeg.org/download.html")
 
 
 def convert_to_mp3(input_path, output_path):
@@ -51,8 +62,14 @@ def convert_to_mp3(input_path, output_path):
         "-ac", str(DEFAULT_CHANNELS),
         "-y", output_path
     ]
-    subprocess.run(command, capture_output=True, text=True, check=True)
-    print(f"✅ MP3 conversion completed: {output_path}")
+    try:
+        subprocess.run(command, capture_output=True, text=True, check=True)
+        print(f"✅ MP3 conversion completed: {output_path}")
+    except FileNotFoundError:
+        raise Exception("FFmpeg is not installed or not found in PATH. Please install FFmpeg:\n"
+                       "- Ubuntu/Debian: sudo apt install ffmpeg\n"
+                       "- macOS: brew install ffmpeg\n"
+                       "- Windows: Download from https://ffmpeg.org/download.html")
 
 
 def process_audio_file(source_file_path, temp_dir, base_filename):

@@ -51,3 +51,13 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+test_runner.py
+app_new.py
+
+# Test coverage
+htmlcov/
+.coverage
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints

@@ -8,38 +8,80 @@ Valuebell Transcriber is a Hugging Face Spaces application built with Gradio tha
 
 ## Architecture
 
-The application is a single-file Gradio web app (`app.py`) that:
+The application uses a **modular architecture** with clear separation of concerns:
+
+```
+valuebell-transcriber/
+├── config/settings.py          # Configuration constants
+├── utils/                      # Utilities
+│   ├── file_utils.py          # File handling, source detection
+│   └── format_utils.py        # Timestamp formatting
+├── services/                   # Core services
+│   ├── download_service.py    # Cloud file downloads
+│   ├── audio_service.py       # Audio processing & conversion
+│   ├── transcription_service.py # ElevenLabs API integration
+│   └── file_service.py        # Download packaging
+├── processors/                 # Data processing
+│   ├── transcript_processor.py # Quality analysis & speaker grouping
+│   └── output_generator.py   # TXT/SRT/JSON generation
+├── ui/interface.py            # Gradio interface
+└── app.py                     # Main orchestration (284 lines)
+```
+
+**Key Features:**
 - Accepts audio/video files via upload or URL (Google Drive, Dropbox, WeTransfer)
 - Uses ElevenLabs API for transcription with speaker detection
 - Provides multiple output formats: TXT, SRT subtitles, and JSON
-- Includes download functionality for processed files
-
-Key components:
-- File source detection and download handlers for various cloud services
-- Transcript processing with quality analysis and speaker identification
-- Gradio interface with tabbed output display
-- File packaging system for multi-format downloads
+- Quality analysis with outlier detection and completeness checking
+- Automatic audio format optimization (WAV/MP3 based on size)
 
 ## Development Commands
 
+**Prerequisites:**
+```bash
+# Install FFmpeg (required for audio processing)
+sudo apt install ffmpeg  # Ubuntu/Debian
+# or
+brew install ffmpeg      # macOS
+```
+
 **Run the application:**
 ```bash
+pip install -r requirements.txt
 python app.py
 ```
 
-**Install dependencies:**
+**Testing:**
 ```bash
-pip install -r requirements.txt
+# Quick validation (no external dependencies)
+python validate_functions.py
+
+# Test modular structure
+python test_modular_simple.py
+
+# Full test suite (requires pytest)
+pip install -r requirements-test.txt
+pytest tests/
 ```
 
-**Deployment:**
-This is configured as a Hugging Face Space (see README.md metadata). The app runs on Gradio 5.39.0 with Python 3.11.
+**Development:**
+See `DEVELOPMENT.md` for detailed setup instructions and troubleshooting.
 
 ## Key Implementation Details
 
-- Main processing function: `process_transcript_complete()` in app.py:310
-- File download handlers: `download_file_from_source()` in app.py:158
-- Quality analysis: `analyze_transcript_quality()` in app.py:206
-- Interface creation: `create_interface()` in app.py:750
+**Modular Components:**
+- Main orchestration: `process_transcript_complete()` in app.py
+- File downloads: `services/download_service.py`
+- Audio processing: `services/audio_service.py` (requires FFmpeg)
+- Transcription: `services/transcription_service.py` (ElevenLabs API)
+- Quality analysis: `processors/transcript_processor.py`
+- Output generation: `processors/output_generator.py`
+- UI interface: `ui/interface.py`
 
-The application uses Git LFS for large file storage (configured in .gitattributes) and requires an ElevenLabs API key for transcription functionality.
+**Configuration:**
+- Settings: `config/settings.py`
+- File types: Audio (.mp3, .wav, .m4a), Video (.mp4, .avi, .mov), JSON (.json)
+- APIs: ElevenLabs API key required for transcription
+
+**Deployment:**
+This is configured as a Hugging Face Space (see README.md metadata). The app runs on Gradio with Python 3.11 and requires FFmpeg to be available in the environment.
