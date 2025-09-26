@@ -28,7 +28,7 @@ tests/
 
 ### Quick Validation (No Dependencies Required)
 ```bash
-python3 validate_functions.py
+python3 scripts/validate_functions.py
 ```
 This validates core functions without requiring external dependencies.
 
@@ -150,7 +150,7 @@ jobs:
         python-version: '3.11'
     - run: pip install -r requirements-test.txt
     - run: pytest --cov=. --cov-report=xml
-    - run: python3 validate_functions.py
+    - run: python3 scripts/validate_functions.py
 ```
 
 ## Test Coverage Goals

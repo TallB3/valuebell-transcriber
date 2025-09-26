@@ -113,12 +113,12 @@ echo "ELEVENLABS_API_KEY=your_key_here" > .env
 
 #### Quick Test (No External Dependencies)
 ```bash
-python validate_functions.py
+python scripts/validate_functions.py
 ```
 
 #### Full Modular Test
 ```bash
-python test_modular_simple.py
+python scripts/test_modular_simple.py
 ```
 
 #### With External Dependencies
@@ -158,7 +158,7 @@ pip install -r requirements.txt
 ## Development Workflow
 
 1. **Make Changes:** Modify modules in their respective directories
-2. **Test Changes:** Run `python test_modular_simple.py`
+2. **Test Changes:** Run `python scripts/test_modular_simple.py`
 3. **Test App:** Run `python app.py` and test functionality
 4. **Commit:** Use git to commit your changes
 

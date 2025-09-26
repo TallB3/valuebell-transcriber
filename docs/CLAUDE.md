@@ -53,9 +53,9 @@ python app.py
 
 **Testing:**
 ```bash
-python validate_functions.py        # Quick validation
-python test_modular_simple.py      # Test modular structure
-pytest tests/                      # Full test suite
+python scripts/validate_functions.py        # Quick validation
+python scripts/test_modular_simple.py      # Test modular structure
+pytest tests/                              # Full test suite
 ```
 
 ## Key Implementation Details
