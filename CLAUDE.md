@@ -37,40 +37,26 @@ valuebell-transcriber/
 
 ## Development Commands
 
-**Clean Environment Setup:**
+**Prerequisites:**
 ```bash
-# Automated setup (Linux/macOS)
-./setup_env.sh
-
-# Or manual setup with virtual environment
-python3 -m venv venv
-source venv/bin/activate  # Linux/macOS
-# venv\Scripts\activate   # Windows
-pip install -r requirements.txt
+# Install FFmpeg (system-wide)
+sudo apt install ffmpeg  # Ubuntu/Debian
+brew install ffmpeg      # macOS
 ```
 
-**Run the application:**
+**Setup and run:**
 ```bash
-# Activate environment first
-source venv/bin/activate  # or your preferred method
+source venv/bin/activate
+pip install -r requirements.txt
 python app.py
 ```
 
 **Testing:**
 ```bash
-# Quick validation (no external dependencies)
-python validate_functions.py
-
-# Test modular structure
-python test_modular_simple.py
-
-# Full test suite (requires pytest)
-pip install -r requirements-test.txt
-pytest tests/
+python validate_functions.py        # Quick validation
+python test_modular_simple.py      # Test modular structure
+pytest tests/                      # Full test suite
 ```
-
-**Development:**
-See `DEVELOPMENT.md` for detailed setup instructions and troubleshooting.
 
 ## Key Implementation Details
 
